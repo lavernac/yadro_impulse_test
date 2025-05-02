@@ -11,12 +11,12 @@ SRC_DIR=csv_read_lib
 BUILD_DIR=obj
 BIN_DIR=bin
 
-MODULES=$(shell find "$(SRC_DIR)" -name "*.c") main.c
+MODULES=$(shell find "$(SRC_DIR)" -name "*.c")
 
 OBJECTS=$(MODULES:%.c=%.o)
 MODULES_TEST=$(wildcard $(TEST_DIR)/*.c)
 OBJECTS_TEST=$(MODULES_TEST:%.c=%.o)
-MODULES_RUN = $(wildcard $(SRC_DIR)/*.c)
+MODULES_RUN = $(wildcard $(SRC_DIR)/*.c) main.c
 OBJECTS_RUN = $(MODULES_RUN:%.c=%.o)
 
 IS_UBUNTU = $(shell grep -i 'ubuntu' /etc/os-release 2>/dev/null)
@@ -29,30 +29,29 @@ else
 	LDLIBS = -lcheck -lm -lsubunit -lpthread  -lrt 
 endif
 
-.PHONY: all run build rebuild clean test gcov_report style_check valgrind_check $(TARGET)
+.PHONY: all run build rebuild clean test gcov_report valgrind_check $(TARGET)
 
-all: clean $(TARGET) # test gcov_report
+all: rebuild # test gcov_report
 
 debug: create_dir
-	$(CC) $(CFLAGS) $(DFLAGS) $(MODULES_RUN) -lm -o $(BIN_DIR)/$@
+	@$(CC) $(CFLAGS) $(DFLAGS) $(MODULES_RUN) -lm -o $(BIN_DIR)/$@
 
 debug_test: create_dir
-	$(CC)  $(DFLAGS) $(MODULES) $(MODULES_TEST) $(LDLIBS) -L. -lm -o $(BIN_DIR)/$@
+	@$(CC)  $(DFLAGS) $(MODULES) $(MODULES_TEST) $(LDLIBS) -L. -lm -o $(BIN_DIR)/$@
 
 build: $(TARGET)
 
 rebuild: clean $(TARGET)
 
-$(TARGET): create_dir $(OBJECTS)
+$(TARGET): create_dir $(OBJECTS) style
 	@ar rcs $(BUILD_DIR)/$(TARGET) $(shell find "$(BUILD_DIR)/$(SRC_DIR)" -name "*.o" -not -name "main.o")
-	@ar rcs $(TARGET) $(shell find "$(BUILD_DIR)/$(SRC_DIR)" -name "*.o" -not -name "main.o")
 
 %.o: %.c
 	@$(CC) $(CFLAGS) -c -o $(BUILD_DIR)/$@ $^
 
-run: create_dir_run $(OBJECTS_RUN)
-	@$(CC) $(CFLAGS) $(shell find "$(BUILD_DIR)/$(SRC_DIR)" -name "*.o") -o $(BIN_DIR)/$(EXECUTABLE) -lm
-	@./$(BIN_DIR)/$(EXECUTABLE)
+run: create_dir_run $(TARGET)
+	@$(CC) $(CFLAGS) main.c $(BUILD_DIR)/$(TARGET)  -o $(BIN_DIR)/$(EXECUTABLE) -lm
+	@./$(BIN_DIR)/$(EXECUTABLE) test_files/t1.csv
 
 test: $(TARGET) $(OBJECTS_TEST)
 	@$(CC) $(CFLAGS) $(wildcard $(BUILD_DIR)/$(TEST_DIR)/*.o) $(BUILD_DIR)/$(TARGET) $(LDLIBS) -L. -o $(BIN_DIR)/$(TEST_TARGET)
@@ -77,12 +76,12 @@ valgrind_check: test
 	--show-leak-kinds=all --track-origins=yes --log-file="valgrind.log" -v --verbose -q --quiet -s ./$(BIN_DIR)/$(TEST_TARGET)
 
 run_and_valgrind: run
-	valgrind --track-origins=yes --leak-check=full --log-file="valgrind.log" --show-leak-kinds=all ./$(BIN_DIR)/$(EXECUTABLE)
+	valgrind --track-origins=yes --leak-check=full --log-file="valgrind.log" --show-leak-kinds=all ./$(BIN_DIR)/$(EXECUTABLE) test_files/t1.csv
 
 clean:
 	@echo "Deleting unnecessary files..."
 	@rm -rf obj bin report *.a *.log 
-	#@rm -rf **/*.dSYM **/*.dSYM **/*.log **/*.log test_coverage.info
+	@rm -rf **/*.dSYM **/*.dSYM **/*.log **/*.log test_coverage.info
 
 # Установка check.h
 
@@ -104,8 +103,7 @@ create_dir_run:
 	@mkdir -p $(BIN_DIR)
 
 style:
-	@clang-format -i -style=Google $(SRC_DIR)/*.c
-	@clang-format -i -style=Google $(TEST_DIR)/*.c
+	@clang-format -i -style=Google $(SRC_DIR)/*.c main.c
 
 cppcheck:
 	@cppcheck --enable=all --suppress=missingIncludeSystem */*.c */*.h
