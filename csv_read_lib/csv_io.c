@@ -13,7 +13,7 @@ Errors read_csv(char *file_to_read, CSVFile_t *csv_file) {
     get_header(str_file, csv_file);
     ret_status = init_csv(csv_file);
     if (ret_status == OK)
-      get_data(str_file_cpy, csv_file);
+      ret_status = get_data(str_file_cpy, csv_file);
     else
       printf("Init memmory error!\n");
 
@@ -39,7 +39,6 @@ void print_csv(CSVFile_t *csv_file) {
 
       printf("\n");
     }
-    printf("\n");
   }
 }
 
