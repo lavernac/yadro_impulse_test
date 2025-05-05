@@ -12,10 +12,11 @@
 
 void count_lines(char *str, CSVFile_t *csv_file) {
   int lines = 0;
-  while (*str) {
-    if (*str == '\n') lines++;
-    str++;
-  }
+  if (str)
+    while (*str) {
+      if (*str == '\n') lines++;
+      str++;
+    }
 
   csv_file->rows_num = lines;
 }
@@ -137,29 +138,29 @@ Errors get_index_cell(Errors ret_status, CSVFile_t *csv_file, char *cell,
 }
 
 int check_data_cell(char *cell) {
-  int ret_status = ISVALUE;
+  int cell_status = ISVALUE;
   if (cell[0] == '=')
-    ret_status = ISFORMULA;
+    cell_status = ISFORMULA;
   else
     for (int i = 0, len = strlen(cell), dot_counter = 0, minuses_counter = 0;
          i < len; i++) {
       if ((!isdigit(cell[i]) && cell[i] != '.' && cell[0] != '-') ||
           dot_counter > 1 || minuses_counter > 1)
-        ret_status = INCORRECT_CELL_ERROR;
+        cell_status = INCORRECT_CELL_ERROR;
       else if (cell[i] == '.')
         dot_counter++;
       else if (cell[i] == '-')
         minuses_counter++;
     }
-  return ret_status;
+  return cell_status;
 }
 
-void *my_realloc(void *ptr, int old_size, int new_size) {
+void *my_realloc(void *ptr, int old_size, int new_size, int szof) {
   if (new_size == 0) {
     free(ptr);
     return NULL;
   }
-  void *new_pointer = malloc(new_size);
+  void *new_pointer = calloc(new_size, szof);
   if (new_pointer == NULL) return NULL;
 
   memcpy(new_pointer, ptr, old_size < new_size ? old_size : new_size);
@@ -169,12 +170,16 @@ void *my_realloc(void *ptr, int old_size, int new_size) {
 
 void add_formula_to_struct(char **cell, Formulas_t *formulas, int i, int *j) {
   if (formulas->formulas_count + 1 > formulas->capacity) {
-    formulas->col_indexes = my_realloc(
-        formulas->col_indexes, formulas->capacity, formulas->capacity + 10);
-    formulas->row_indexes = my_realloc(
-        formulas->row_indexes, formulas->capacity, formulas->capacity + 10);
+    formulas->col_indexes =
+        my_realloc(formulas->col_indexes, formulas->capacity,
+                   formulas->capacity + 10, sizeof(int));
+    formulas->row_indexes =
+        my_realloc(formulas->row_indexes, formulas->capacity,
+                   formulas->capacity + 10, sizeof(int));
     formulas->formulas = my_realloc(formulas->formulas, formulas->capacity,
-                                    formulas->capacity + 10);
+                                    formulas->capacity + 10, sizeof(char *));
+    formulas->ready = my_realloc(formulas->ready, formulas->capacity,
+                                 formulas->capacity + 10, sizeof(int));
     formulas->capacity += 10;
   }
 
@@ -214,6 +219,7 @@ Errors get_data_cell(char **cell, Formulas_t *formulas, CSVFile_t *csv_file,
 void free_tmp_data(char **rows, int rows_num, Formulas_t *formulas) {
   free(formulas->col_indexes);
   free(formulas->row_indexes);
+  free(formulas->ready);
   for (int i = 0; i < formulas->formulas_count; i++)
     free(formulas->formulas[i]);
   free(formulas->formulas);
@@ -221,7 +227,22 @@ void free_tmp_data(char **rows, int rows_num, Formulas_t *formulas) {
   free(rows);
 }
 
-double decode_cell(char *formula, CSVFile_t *csv_file, char **end_of_opernad) {
+int get_formula_index(Formulas_t formulas, int i, int j) {
+  int i_tmp = 0, flag = 1, index = 0;
+  for (; i_tmp < formulas.formulas_count && flag; i_tmp++) {
+    for (int j_tmp = 0; j_tmp < formulas.formulas_count && flag; j_tmp++) {
+      if (formulas.row_indexes[i_tmp] == i_tmp &&
+          formulas.col_indexes[i_tmp] == j_tmp)
+        index++;
+      if (i_tmp == i && j_tmp == j) flag = 0;
+    }
+  }
+
+  return index;
+}
+
+double decode_cell(char *formula, CSVFile_t *csv_file, char **end_of_opernad,
+                   Formulas_t formulas) {
   int col_name_len = 0, row_len = 0;
   for (; !isdigit(formula[col_name_len]); col_name_len++);
   for (row_len = col_name_len; isdigit(formula[row_len]); row_len++);
@@ -236,44 +257,60 @@ double decode_cell(char *formula, CSVFile_t *csv_file, char **end_of_opernad) {
   int i = 0, j = 0, row_index = atof(row);
   for (; j < csv_file->cols_num && strcmp(col_name, csv_file->headers[j]); j++);
   for (; i < csv_file->rows_num && row_index != csv_file->rows_nums[i]; i++);
+  free(col_name);
+  free(row);
+
+  if (isnan(csv_file->data[i][j]))
+    calculate_value(formulas, csv_file, get_formula_index(formulas, i, j));
 
   return csv_file->data[i][j];
 }
 
 Errors calculate_value(Formulas_t formulas, CSVFile_t *csv_file, int i) {
   Errors ret_status = OK;
-  char *end_of_operand = NULL, operation = '\0';
-  double operand1 =
-      decode_cell(formulas.formulas[i] + 1, csv_file, &end_of_operand);
-  operation = *end_of_operand;
-  double operand2 = decode_cell(
-      formulas.formulas[i] + (end_of_operand - formulas.formulas[i]) + 1,
-      csv_file, &end_of_operand);
-  switch (operation) {
-    case '+':
-      csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-          operand1 + operand2;
-      break;
-    case '-':
-      csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-          operand1 - operand2;
-      break;
-    case '*':
-      csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-          operand1 * operand2;
-      break;
-    case '/':
-      if (operand2 == 0) {
-        ret_status = DIV_ZERO_ERROR;
-        printf("Div zero error\n");
-      } else
+  if (formulas.ready[i] != 1) {
+    char *end_of_operand = NULL, operation = '\0';
+    double operand1 = decode_cell(formulas.formulas[i] + 1, csv_file,
+                                  &end_of_operand, formulas);
+    operation = *end_of_operand;
+    double operand2 = decode_cell(
+        formulas.formulas[i] + (end_of_operand - formulas.formulas[i]) + 1,
+        csv_file, &end_of_operand, formulas);
+
+    switch (operation) {
+      case '+':
         csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-            operand1 / operand2;
-      break;
-    default:
-      printf("Unknown operation!\n");
-      ret_status = UNKNOWN_OPERATION_ERROR;
+            operand1 + operand2;
+        printf("calculate plus\n");
+        break;
+      case '-':
+        csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
+            operand1 - operand2;
+        printf("calculate minus\n");
+
+        break;
+      case '*':
+        csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
+            operand1 * operand2;
+        break;
+      case '/':
+        if (operand2 == 0) {
+          ret_status = DIV_ZERO_ERROR;
+          printf("Div zero error: %d - row index, %s - col name\n",
+                 csv_file->rows_nums[formulas.row_indexes[i]],
+                 csv_file->headers[formulas.col_indexes[i]]);
+        } else
+          csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
+              operand1 / operand2;
+        break;
+      default:
+        printf("Unknown operation: %d - row index, %s - col name\n",
+               csv_file->rows_nums[formulas.row_indexes[i]],
+               csv_file->headers[formulas.col_indexes[i]]);
+        ret_status = UNKNOWN_OPERATION_ERROR;
+    }
   }
+  formulas.ready[i] = 1;
 
   return ret_status;
 }
