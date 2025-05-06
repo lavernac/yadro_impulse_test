@@ -1,4 +1,4 @@
 ,A,B,Cell
-1,=Cell30+Cell1,3,=A2+B2
+1,=Cell30+Cell1,3,=B2/A2
 2,2,4,6
 30,7,8,=Cell1-A30

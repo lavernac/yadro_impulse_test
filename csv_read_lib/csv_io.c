@@ -7,8 +7,7 @@
 Errors read_csv(char *file_to_read, CSVFile_t *csv_file) {
   Errors ret_status = OK;
   char *str_file = NULL, *str_file_cpy = NULL;
-  if (csv_file) {
-    file_to_str(&str_file, file_to_read, &str_file_cpy);
+  if (csv_file && file_to_str(&str_file, file_to_read, &str_file_cpy) == OK) {
     count_lines(str_file, csv_file);
     get_header(str_file, csv_file);
     ret_status = init_csv(csv_file);

@@ -1,7 +1,7 @@
 TARGET=csv_read.a
 CC=gcc
 DFLAGS=-g3
-CFLAGS=-Wall -Wextra -std=c11 -I csv_read_include # -Werror
+CFLAGS=-Wall -Wextra -std=c11 -I csv_read_include -g# -Werror
 OS=$(shell uname)
 TEST_TARGET=test
 EXECUTABLE=csv_read
@@ -10,6 +10,7 @@ TEST_DIR=tests
 SRC_DIR=csv_read_lib
 BUILD_DIR=obj
 BIN_DIR=bin
+TEST_FILES_DIR=test_files
 
 MODULES=$(shell find "$(SRC_DIR)" -name "*.c")
 
@@ -18,6 +19,8 @@ MODULES_TEST=$(wildcard $(TEST_DIR)/*.c)
 OBJECTS_TEST=$(MODULES_TEST:%.c=%.o)
 MODULES_RUN = $(wildcard $(SRC_DIR)/*.c) main.c
 OBJECTS_RUN = $(MODULES_RUN:%.c=%.o)
+CSV_FILES=$(wildcard $(TEST_FILES_DIR)/*/*.csv)
+
 
 IS_UBUNTU = $(shell grep -i 'ubuntu' /etc/os-release 2>/dev/null)
 IS_DEBIAN = $(shell grep -i 'debian' /etc/os-release 2>/dev/null)
@@ -51,7 +54,15 @@ $(TARGET): create_dir $(OBJECTS) style
 
 run: create_dir_run $(TARGET)
 	@$(CC) $(CFLAGS) main.c $(BUILD_DIR)/$(TARGET)  -o $(BIN_DIR)/$(EXECUTABLE) -lm
-	@./$(BIN_DIR)/$(EXECUTABLE) test_files/recursive.csv
+	@./$(BIN_DIR)/$(EXECUTABLE) test_files/simple_recursive.csv
+
+run_all: create_dir_run $(TARGET)
+	@$(CC) $(CFLAGS) main.c $(BUILD_DIR)/$(TARGET)  -o $(BIN_DIR)/$(EXECUTABLE) -lm
+	@for file in $(CSV_FILES); do \
+		echo -n "run file $$file\n"; \
+		./$(BIN_DIR)/$(EXECUTABLE) $$file; \
+		echo ""; \
+	done
 
 test: $(TARGET) $(OBJECTS_TEST)
 	@$(CC) $(CFLAGS) $(wildcard $(BUILD_DIR)/$(TEST_DIR)/*.o) $(BUILD_DIR)/$(TARGET) $(LDLIBS) -L. -o $(BIN_DIR)/$(TEST_TARGET)
@@ -76,7 +87,7 @@ valgrind_check: test
 	--show-leak-kinds=all --track-origins=yes --log-file="valgrind.log" -v --verbose -q --quiet -s ./$(BIN_DIR)/$(TEST_TARGET)
 
 run_and_valgrind: run
-	valgrind --track-origins=yes --leak-check=full --log-file="valgrind.log" --show-leak-kinds=all ./$(BIN_DIR)/$(EXECUTABLE) test_files/simple_recursive.csv
+	valgrind --track-origins=yes --leak-check=full --log-file="valgrind.log" --show-leak-kinds=all ./$(BIN_DIR)/$(EXECUTABLE) test_files/bad/arg.csv
 
 clean:
 	@echo "Deleting unnecessary files..."
