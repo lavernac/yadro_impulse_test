@@ -1,7 +1,7 @@
 TARGET=csv_read.a
 CC=gcc
 DFLAGS=-g3
-CFLAGS=-Wall -Wextra -std=c11 -I csv_read_include -g# -Werror
+CFLAGS=-Wall -Wextra -std=c11 -I csv_read_include # -Werror
 OS=$(shell uname)
 TEST_TARGET=test
 EXECUTABLE=csv_read
@@ -87,7 +87,7 @@ valgrind_check: test
 	--show-leak-kinds=all --track-origins=yes --log-file="valgrind.log" -v --verbose -q --quiet -s ./$(BIN_DIR)/$(TEST_TARGET)
 
 run_and_valgrind: run
-	valgrind --track-origins=yes --leak-check=full --log-file="valgrind.log" --show-leak-kinds=all ./$(BIN_DIR)/$(EXECUTABLE) test_files/bad/arg.csv
+	@valgrind --track-origins=yes --leak-check=full --log-file="valgrind.log" --show-leak-kinds=all ./$(BIN_DIR)/$(EXECUTABLE) test_files/bad/arg.csv
 
 clean:
 	@echo "Deleting unnecessary files..."
