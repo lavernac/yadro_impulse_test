@@ -21,8 +21,9 @@ void count_lines(char *str, CSVFile_t *csv_file) {
   csv_file->rows_num = lines;
 }
 
-void file_to_str(char **buffer, char *filename, char **buffer_cpy) {
+Errors file_to_str(char **buffer, char *filename, char **buffer_cpy) {
   long length = 0;
+  Errors ret_status = OK;
   FILE *f = fopen(filename, "rb");
 
   if (f) {
@@ -36,8 +37,12 @@ void file_to_str(char **buffer, char *filename, char **buffer_cpy) {
     }
     strncpy(*buffer_cpy, *buffer, length + 1);
     fclose(f);
-  } else
+  } else {
+    ret_status = CANT_OPEN_FILE_ERROR;
     printf("Can`t open file!\n");
+  }
+
+  return ret_status;
 }
 
 void get_col(char **col_name, char *header_cpy, CSVFile_t *csv_file,
@@ -227,22 +232,22 @@ void free_tmp_data(char **rows, int rows_num, Formulas_t *formulas) {
   free(rows);
 }
 
-int get_formula_index(Formulas_t formulas, int i, int j) {
+int get_formula_index(Formulas_t *formulas, int i, int j) {
   int i_tmp = 0, flag = 1, index = 0;
-  for (; i_tmp < formulas.formulas_count && flag; i_tmp++) {
-    for (int j_tmp = 0; j_tmp < formulas.formulas_count && flag; j_tmp++) {
-      if (formulas.row_indexes[i_tmp] == i_tmp &&
-          formulas.col_indexes[i_tmp] == j_tmp)
+  for (; i_tmp < (*formulas).formulas_count && flag; i_tmp++) {
+    for (int j_tmp = 0; j_tmp < (*formulas).formulas_count && flag; j_tmp++) {
+      if ((*formulas).row_indexes[index] == i_tmp &&
+          (*formulas).col_indexes[index] == j_tmp)
         index++;
       if (i_tmp == i && j_tmp == j) flag = 0;
     }
   }
 
-  return index;
+  return index - 1;
 }
 
 double decode_cell(char *formula, CSVFile_t *csv_file, char **end_of_opernad,
-                   Formulas_t formulas) {
+                   Formulas_t *formulas, int *is_good_arg) {
   int col_name_len = 0, row_len = 0;
   for (; !isdigit(formula[col_name_len]); col_name_len++);
   for (row_len = col_name_len; isdigit(formula[row_len]); row_len++);
@@ -257,60 +262,78 @@ double decode_cell(char *formula, CSVFile_t *csv_file, char **end_of_opernad,
   int i = 0, j = 0, row_index = atof(row);
   for (; j < csv_file->cols_num && strcmp(col_name, csv_file->headers[j]); j++);
   for (; i < csv_file->rows_num && row_index != csv_file->rows_nums[i]; i++);
+
   free(col_name);
   free(row);
-
-  if (isnan(csv_file->data[i][j]))
+  double ret_data = NAN;
+  if (j == csv_file->cols_num || i == csv_file->rows_num) {
+    printf("Bad arg!\n");
+    *is_good_arg = 0;
+  }
+  if (*is_good_arg && isnan(csv_file->data[i][j]))
     calculate_value(formulas, csv_file, get_formula_index(formulas, i, j));
 
-  return csv_file->data[i][j];
+  if (*is_good_arg) ret_data = csv_file->data[i][j];
+
+  return ret_data;
 }
 
-Errors calculate_value(Formulas_t formulas, CSVFile_t *csv_file, int i) {
+Errors do_operation(CSVFile_t *csv_file, Formulas_t *formulas, char operation,
+                    double arg1, double arg2, int is_good_arg, int i) {
   Errors ret_status = OK;
-  if (formulas.ready[i] != 1) {
-    char *end_of_operand = NULL, operation = '\0';
-    double operand1 = decode_cell(formulas.formulas[i] + 1, csv_file,
-                                  &end_of_operand, formulas);
-    operation = *end_of_operand;
-    double operand2 = decode_cell(
-        formulas.formulas[i] + (end_of_operand - formulas.formulas[i]) + 1,
-        csv_file, &end_of_operand, formulas);
-
+  if (is_good_arg) {
     switch (operation) {
       case '+':
-        csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-            operand1 + operand2;
-        printf("calculate plus\n");
+        csv_file->data[(*formulas).row_indexes[i]][(*formulas).col_indexes[i]] =
+            arg1 + arg2;
         break;
       case '-':
-        csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-            operand1 - operand2;
-        printf("calculate minus\n");
-
+        csv_file->data[(*formulas).row_indexes[i]][(*formulas).col_indexes[i]] =
+            arg1 - arg2;
         break;
       case '*':
-        csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-            operand1 * operand2;
+        csv_file->data[(*formulas).row_indexes[i]][(*formulas).col_indexes[i]] =
+            arg1 * arg2;
         break;
       case '/':
-        if (operand2 == 0) {
+        if (arg2 == 0) {
           ret_status = DIV_ZERO_ERROR;
           printf("Div zero error: %d - row index, %s - col name\n",
-                 csv_file->rows_nums[formulas.row_indexes[i]],
-                 csv_file->headers[formulas.col_indexes[i]]);
+                 csv_file->rows_nums[(*formulas).row_indexes[i]],
+                 csv_file->headers[(*formulas).col_indexes[i]]);
         } else
-          csv_file->data[formulas.row_indexes[i]][formulas.col_indexes[i]] =
-              operand1 / operand2;
+          csv_file
+              ->data[(*formulas).row_indexes[i]][(*formulas).col_indexes[i]] =
+              arg1 / arg2;
         break;
       default:
         printf("Unknown operation: %d - row index, %s - col name\n",
-               csv_file->rows_nums[formulas.row_indexes[i]],
-               csv_file->headers[formulas.col_indexes[i]]);
+               csv_file->rows_nums[(*formulas).row_indexes[i]],
+               csv_file->headers[(*formulas).col_indexes[i]]);
         ret_status = UNKNOWN_OPERATION_ERROR;
     }
+  } else {
+    ret_status = BAD_ARG_ERROR;
   }
-  formulas.ready[i] = 1;
+
+  return ret_status;
+}
+
+Errors calculate_value(Formulas_t *formulas, CSVFile_t *csv_file, int i) {
+  Errors ret_status = OK;
+  if ((*formulas).ready[i] != 1) {
+    char *end_of_arg = NULL, operation = '\0';
+    int is_good_arg = 1;
+    double arg1 = decode_cell((*formulas).formulas[i] + 1, csv_file,
+                              &end_of_arg, formulas, &is_good_arg);
+    operation = *end_of_arg;
+    double arg2 = decode_cell(
+        (*formulas).formulas[i] + (end_of_arg - (*formulas).formulas[i]) + 1,
+        csv_file, &end_of_arg, formulas, &is_good_arg);
+    ret_status =
+        do_operation(csv_file, formulas, operation, arg1, arg2, is_good_arg, i);
+  }
+  (*formulas).ready[i] = 1;
 
   return ret_status;
 }
@@ -331,8 +354,16 @@ Errors get_data(char *str_file, CSVFile_t *csv_file) {
         ret_status = get_data_cell(&cell, &formulas, csv_file, i - 1, &j);
     }
   }
+  // в переменной formulas хранятся все ячейки, которые надо будет посчитать, с
+  // помощью этого цикла можно посмотреть содержимое той переменной
+
+  // for (int i = 0; i <
+  // formulas.formulas_count; i++) {
+  //   printf("%d: %d %d %s\n", i, formulas.row_indexes[i],
+  //          formulas.col_indexes[i], formulas.formulas[i]);
+  // }
   for (int i = 0; i < formulas.formulas_count && ret_status == OK; i++)
-    ret_status = calculate_value(formulas, csv_file, i);
+    ret_status = calculate_value(&formulas, csv_file, i);
 
   free_tmp_data(rows, csv_file->rows_num, &formulas);
 
