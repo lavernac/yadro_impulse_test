@@ -18,3 +18,6 @@ Errors init_csv(CSVFile_t *csv_file);
 Errors get_data(char *str_file, CSVFile_t *csv_file);
 Errors calculate_value(Formulas_t *formulas, CSVFile_t *csv_file, int i);
 char **convert_file_to_rows(char *str_file, int rows_num);
+
+
+Errors check_index_cell(char *cell);

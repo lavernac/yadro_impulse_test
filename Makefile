@@ -50,7 +50,7 @@ $(TARGET): create_dir $(OBJECTS) style
 	@ar rcs $(BUILD_DIR)/$(TARGET) $(shell find "$(BUILD_DIR)/$(SRC_DIR)" -name "*.o" -not -name "main.o")
 
 %.o: %.c
-	@$(CC) $(CFLAGS) -c -o $(BUILD_DIR)/$@ $^
+	@$(CC) $(DFLAGS) $(CFLAGS) -c -o $(BUILD_DIR)/$@ $^
 
 run: create_dir_run $(TARGET)
 	@$(CC) $(CFLAGS) main.c $(BUILD_DIR)/$(TARGET)  -o $(BIN_DIR)/$(EXECUTABLE) -lm
@@ -65,7 +65,7 @@ run_all: create_dir_run $(TARGET)
 	done
 
 test: $(TARGET) $(OBJECTS_TEST)
-	@$(CC) $(CFLAGS) $(wildcard $(BUILD_DIR)/$(TEST_DIR)/*.o) $(BUILD_DIR)/$(TARGET) $(LDLIBS) -L. -o $(BIN_DIR)/$(TEST_TARGET)
+	@$(CC) $(DFLAGS) $(CFLAGS) $(wildcard $(BUILD_DIR)/$(TEST_DIR)/*.o) $(BUILD_DIR)/$(TARGET) $(LDLIBS) -L. -o $(BIN_DIR)/$(TEST_TARGET)
 	@./$(BIN_DIR)/$(TEST_TARGET)
 	
 gcov_report: $(TARGET)
@@ -114,7 +114,7 @@ create_dir_run:
 	@mkdir -p $(BIN_DIR)
 
 style:
-	@clang-format -i -style=Google $(SRC_DIR)/*.c main.c
+	@clang-format -i -style=Google $(SRC_DIR)/*.c $(TEST_DIR)/*.c main.c
 
 cppcheck:
 	@cppcheck --enable=all --suppress=missingIncludeSystem */*.c */*.h
